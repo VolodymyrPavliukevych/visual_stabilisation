@@ -7,10 +7,13 @@
 """
 
 from pymavlink import mavutil
+
 from pymavlink.dialects.v20.ardupilotmega import MAVLink_optical_flow_message
 from pymavlink.dialects.v20.ardupilotmega import MAVLink_set_position_target_local_ned_message
 # from pymavlink.dialects.v20.ardupilotmega import set_position_target_local_ned_send
 from pymavlink.dialects.v20.ardupilotmega import MAVLink
+
+from pymavlink.dialects.v20.ardupilotmega import COPTER_MODE_GUIDED_NOGPS, MAV_TYPE_QUADROTOR
 
 from utilities.connect_to_sysid import connect_to_sysid
 from utilities.wait_for_position_aiding import wait_until_position_aiding
@@ -19,9 +22,11 @@ from utilities.get_autopilot_info import get_autopilot_info
 
 import threading
 from enum import IntEnum, StrEnum
-from time import sleep
-
+from time import sleep, time
+import math
 from optical_flow_interactor import OpticalFlowInteractor
+
+from message_dispatcher import MessageDispatcher
 
 class FlyTask(IntEnum):
     IDLE = 0
@@ -71,22 +76,17 @@ class AutoPilot():
         self.optical_flow_interactor = OpticalFlowInteractor()
         self.__fly_task = FlyTask.IDLE
         self.__fly_state = FlyState.UNKNOWN
-        
-
+        self.message_dispatcher = MessageDispatcher(controller=self)
         self.connection_listener_thread = threading.Thread(target=self.connection_listener, name="CLT", daemon=True)
         self.connection_listener_thread.start()
 
-        self.global_position_subscriber_thread = None
-        self.optical_flow_subscriber_thread = None
+        self.message_subscriber_thread = None
 
         self.altitute = None
 
     def start_subscibers(self):
-        self.global_position_subscriber_thread = threading.Thread(target=self.global_position_listener, name="GPSubscriberThread", daemon=True)
-        self.global_position_subscriber_thread.start()
-
-        # self.optical_flow_subscriber_thread = threading.Thread(target=self.optical_flow_listener, name="OFSubscriberThread", daemon=True)
-        # self.optical_flow_subscriber_thread.start()        
+        self.message_subscriber_thread = threading.Thread(target=self.message_subscriber_listener, name="SubscriberListenerThread", daemon=True)
+        self.message_subscriber_thread.start()       
 
     def change_fly_task(self, to_task:FlyTask):
         assert isinstance(to_task, FlyTask) == True, "Wrong task type"
@@ -127,20 +127,43 @@ class AutoPilot():
 
 
     def fly(self):
-        while self.is_ready == False:
+        while True: #self.is_ready == False:
             print(f"Whaiting for connection...")
             sleep(1)
         
         try:
             # pass
-            self.change_fly_task(to_task=FlyTask.TEST_FLY_CONTROLS)
-            self.follow_test_fly_controls_task()
+
+            print("Taking off...")
+            self.guided_no_gps_exec_taking_off()
+
+            print("Holding altitude...")
+            self.guided_no_gps_exec_altitude()
+            # self.change_fly_task(to_task=FlyTask.TEST_FLY_CONTROLS)
+            # self.follow_test_fly_controls_task()
         except Exception as error:
              print(error)
         
         while self.__fly_task == FlyTask.IDLE:
              # Waiting for task will be resolved
              pass
+
+
+    def guided_no_gps_exec_taking_off(self):
+        # Takeoff sequence
+        takeoff_thrust = 0.6  # Adjust thrust value if needed
+
+        for _ in range(150):  # Send multiple commands to ensure takeoff
+            self.send_attitude_target(thrust=takeoff_thrust)
+            print(f"send_attitude_target: {takeoff_thrust}")
+            sleep(0.1)        
+
+    def guided_no_gps_exec_altitude(self):
+        hover_thrust = 0.5
+
+        for _ in range(100):  # Maintain altitude
+            self.send_attitude_target(thrust=hover_thrust)
+            sleep(0.1)
 
     def follow_test_fly_controls_task(self):
         print(f"Follow test fly control: {self.__fly_state}")
@@ -186,81 +209,75 @@ class AutoPilot():
 
         except Exception as error:
              print(error)
-        
-        
+                
     def connection_established(self):
+        self.the_connection.set_mode(COPTER_MODE_GUIDED_NOGPS)
         self.is_listening = True
-        # Set to GUIDED mode
-        #self.the_connection.set_mode_apm("GUIDED_NOGPS")
-
-        # Arm the drone
-        # self.the_connection.arducopter_arm()
         self.start_subscibers()
-        # self.compute_velocity_command(0,0,0)
-
 
     def connection_lost(self):
          self.is_listening = False
 
-    def connection_listener(self):
+    def current_mode(self, timeout=3) -> tuple:
+        start_time = time()
+        while time() - start_time < timeout:
+            message = self.the_connection.wait_heartbeat(timeout=timeout)
+            if message is not None:
+                if message.type != MAV_TYPE_QUADROTOR:
+                    continue
+                mode_id = message.custom_mode
+                mode_mapping = self.the_connection.mode_mapping()
+                current_mode = [mode for mode, id in mode_mapping.items() if id == mode_id]
+                print(f"Mode: {current_mode[0]}")
+                return (mode_id, current_mode)
+        return None
+
+
+    def connection_listener(self, timeout=3):
         self.the_connection.wait_heartbeat()
         print(f"Heartbeat from system (system {self.the_connection.target_system} component {self.the_connection.target_component}) for connection listener")
         self.connection_established()
 
         timestamp = 0
+        start_time = time()
         while True:
             try:
-                message = self.the_connection.wait_heartbeat(timeout=5, blocking=True)
-                if message:
-                    dlt = message._timestamp - timestamp - 1
-                    print(f"Heartbeat dlt: {dlt:0.2f} sec")
-                    timestamp = message._timestamp
-                    if self.is_listening == False:
-                        self.connection_established()
-                        continue
-                else:
+                loop_time = time() - start_time
+                if loop_time > timeout:
                     self.connection_lost()
+
+                message = self.the_connection.wait_heartbeat(blocking=False, timeout=timeout)
+                if message is None:
+                    continue
+                if message.type != MAV_TYPE_QUADROTOR:
+                    continue
+                
+                dlt = message._timestamp - timestamp
+                mode_name = mavutil.mode_string_acm(message.custom_mode)
+                print(f"Heartbeat dlt: {dlt:0.2f} sec timeout:{loop_time:0.2f} sec. Mode: '{mode_name}'")
+                
+                timestamp = message._timestamp
+                start_time = time() 
+                
+                if self.is_listening == False:
+                    self.connection_established()
+
             except Exception as error:
                 print(f"Error: {error}")
                 
-            sleep(1)
-
-    def global_position_listener(self):
-        self.the_connection.wait_heartbeat()
-        print(f"Heartbeat from system (system {self.the_connection.target_system} component {self.the_connection.target_component}) for global position subscriber")
-
+    def message_subscriber_listener(self):
+        print("Run message_subscriber_listener")
+        subscriber_list_types = ["GLOBAL_POSITION_INT", "OPTICAL_FLOW"]
+        
         while self.is_listening:
-            message = self.the_connection.recv_match(type='GLOBAL_POSITION_INT', blocking=False)
+            message = self.the_connection.recv_msg()
             if message is None:
                 continue
-            self.did_receive_global_position(message)
-        print("Stop global_position_listener")
+            if message.get_type() in subscriber_list_types:
+                self.message_dispatcher.did_receive_message(message)
 
-    def optical_flow_listener(self):
-        self.the_connection.wait_heartbeat()
-        print(f"Heartbeat from system (system {self.the_connection.target_system} component {self.the_connection.target_component}) for optical flow subscriber")
-
-        while self.is_listening:
-            message = self.the_connection.recv_match(type='OPTICAL_FLOW', blocking=False)
-            if message is None:
-                continue            
-            self.did_receive_optical_flow(message)
-
-            message = self.the_connection.recv_match(type='POSITION_TARGET_LOCAL_NED', blocking=False)
-            if message:
-                print(f"Received: {message}")
-
-            message = self.the_connection.recv_match(type='LOCAL_POSITION_NED', blocking=False)
-            if message:
-                print(f"Received: {message}")
-
-        print("Stop optical_flow_listener")
-
-
-    # Listen to optical flow messages
-    def mavlink_callback(self, name, msg):
-        if name == 'OPTICAL_FLOW':
-            self.did_receive_optical_flow(msg)
+            
+        print("Stop message_subscriber_listener")
 
 
     # It should be subscriber base message buss
@@ -279,83 +296,81 @@ class AutoPilot():
         compensation = self.optical_flow_interactor.compute_correction_optical_flow(message)
         if compensation is not None:
             timestamp, velocity_x, velocity_y = compensation
-            #self.compute_velocity_command(timestamp, velocity_x, velocity_y)
+            self.compute_velocity_command(timestamp, velocity_x, velocity_y)
             pass
 
+    # Function to send attitude target
+    def send_attitude_target(self, roll=0, pitch=0, yaw=0, thrust=0.5):
+        # Arm the drone
+        self.the_connection.arducopter_arm()
+        self.the_connection.motors_armed_wait()
+        print("Drone armed.")
+        """
+        Sends a MAVLink SET_ATTITUDE_TARGET message.
+        roll, pitch, yaw are in radians.
+        thrust is from 0.0 (no thrust) to 1.0 (full thrust).
+        """
+        q = [
+            math.cos(yaw / 2),  # w
+            0,                  # x (roll)
+            0,                  # y (pitch)
+            math.sin(yaw / 2)   # z (yaw)
+        ]
+        
+        self.the_connection.mav.set_attitude_target_send(
+            int(time()),  # Timestamp in microseconds
+            1,  # Target system (drone ID)
+            1,  # Target component
+            0b00000000,  # Type mask: No masking (control roll, pitch, yaw, and thrust)
+            q,  # Quaternion (attitude)
+            0,  # Body roll rate
+            0,  # Body pitch rate
+            0,  # Body yaw rate
+            thrust  # Thrust (0 to 1)
+        )
+
     # Compute velocity command to the drone
-    def compute_velocity_command(self, timestamp, velocity_x, velocity_y, velocity_z=0):
+    def compute_velocity_command(self, timestamp: int, velocity_x: float, velocity_y: float, velocity_z: float = 0):
+        pass
+
+    def guided_exec_position_target_local_ned_message(self, xyz: tuple, vxvyvz: tuple, yaw_params: tuple):
+        type_mask = 0b0000111111000111  # Ignore acceleration & force
+        
+        x, y, z = xyz
+        vx, vy, vz = vxvyvz
+        yaw, yaw_rate = yaw_params
+
         self.the_connection.mav.send(mavutil.mavlink.MAVLink_set_position_target_local_ned_message(
-            10, 
+            0, 
             self.the_connection.target_system, 
             self.the_connection.target_component, 
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, 
-            int(0b010111111000), 
-            20, 0, -10, # x, y, z positions
-            2, 0, 1, # x, y, z velocity
+            int(type_mask), 
+            x, y, z, # x, y, z positions
+            vx, vy, vz, # x, y, z velocity
             0, 0, 0, # x, y, z acceleration
-            0.0, 0.0)) #yaw, yaw_rate
+            yaw, yaw_rate)) #yaw, yaw_rate
 
-        # message = MAVLink_set_position_target_local_ned_message(
-        #     0,  # time_boot_ms (not used)
-        #     1, 1,  # target_system, target_component (usually 1 for both)
-        #     mavutil.mavlink.MAV_FRAME_BODY_NED,  # Coordinate frame
-        #     0b0000111111000111,  # Type mask (only velocity control)
-        #     0, 0, 0,  # x, y, z positions (not used)
-        #     velocity_x, velocity_y, velocity_z,  # x, y, z velocity (move forward at 1 m/s)
-        #     0, 0, 0,  # x, y, z acceleration (not used)
-        #     0, 0  # yaw, yaw_rate (not used)
-        # )
-        # time_boot_ms = 0
-        # coordinate_frame = mavutil.mavlink.MAV_FRAME_BODY_NED
-        # force_mavlink1 = True
-        # target_system = 1
-        # target_component = 1
-        # type_mask = 0b0000111111000111
-        # self.the_connection.mav.send(
-        #     self.the_connection.mav.set_position_target_local_ned_encode(
-        #         time_boot_ms, 
-        #         target_system, 
-        #         target_component, 
-        #         coordinate_frame, 
-        #         type_mask, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1, 
-        #         1), 
-        #     force_mavlink1=force_mavlink1)
-
-
-        # type_mask = 0b0000111111000111  # Ignore acceleration & force
-
-        # import time
-        # x, y, z = 1, 1, 0
-        # vx, vy, vz = 1, 1, 0
-        # yaw, yaw_rate = 0, 0
-
-        # self.the_connection.mav.set_position_target_local_ned_send(
-        #     0,  #int(time.time())  Timestamp in milliseconds
-        #     target_system,    # Target system ID
-        #     target_component, # Target component ID
-        #     mavutil.mavlink.MAV_FRAME_LOCAL_NED,  # Use NED frame
-        #     type_mask,               # Ignore some fields
-        #     x, y, z,                 # Position (meters)
-        #     vx, vy, vz,               # Velocity (m/s)
-        #     0, 0, 0,                 # Acceleration (not used)
-        #     yaw, yaw_rate             # Yaw and yaw rate
-        # )        
+    def guided_exec_position_target_local_ned_send(self, xyz: tuple, vxvyvz: tuple, yaw_params: tuple):
+        type_mask = 0b0000111111000111  # Ignore acceleration & force
         
-    def update_attitude(self, message):
-         pass
+        x, y, z = xyz
+        vx, vy, vz = vxvyvz
+        yaw, yaw_rate = yaw_params
+        
+        self.the_connection.mav.set_position_target_local_ned_send(
+            int(time()),        #Timestamp in milliseconds
+            self.the_connection.target_system,      # Target system ID
+            self.the_connection.target_component,   # Target component ID
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,    # Use NED frame
+            int(type_mask),     # Ignore some fields
+            x, y, z,            # Position (meters)
+            vx, vy, vz,         # Velocity (m/s)
+            0, 0, 0,            # Acceleration (not used)
+            yaw, yaw_rate       # Yaw and yaw rate
+        )
 
-    def land(self, tgt_sys_id: int = 1, tgt_comp_id=1):
-
+    def guided_exec_land(self, tgt_sys_id: int = 1, tgt_comp_id=1):
         autopilot_info = get_autopilot_info(self.the_connection, tgt_sys_id)
         if autopilot_info["autopilot"] == "ardupilotmega":
             mode = self.the_connection.mode_mapping()
@@ -370,7 +385,7 @@ class AutoPilot():
         args = [tgt_sys_id, tgt_comp_id, mavutil.mavlink.MAV_CMD_NAV_LAND, 0, mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, mode_id, 0, 0, 0, 0, 0]
         self.the_connection.mav.command_long_send(*args)
 
-    def takeoff(self, takeoff_altitude: float, tgt_sys_id: int = 1, tgt_comp_id=1):
+    def guided_exec_takeoff(self, takeoff_altitude: float, tgt_sys_id: int = 1, tgt_comp_id=1):
         print(f"execut take off: {takeoff_altitude}m")
         wait_until_position_aiding(self.the_connection)
 
@@ -394,21 +409,21 @@ class AutoPilot():
         self.the_connection.mav.command_long_send(*args)
         
         ack_msg = self.the_connection.recv_match(type='COMMAND_ACK', blocking=True, timeout=3)
-        #print(f"Change Mode ACK:  {ack_msg}")
+        print(f"Change Mode ACK:  {ack_msg}")
 
         # Arm the UAS
         args = [tgt_sys_id, tgt_comp_id, mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0, 1, 0, 0, 0, 0, 0, 0]
         self.the_connection.mav.command_long_send(*args)
 
         arm_msg = self.the_connection.recv_match(type='COMMAND_ACK', blocking=True, timeout=3)
-        #print(f"Arm ACK:  {arm_msg}")
+        print(f"Arm ACK:  {arm_msg}")
 
         # Command Takeoff
         args = [tgt_sys_id, tgt_comp_id, mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0] + takeoff_params
         self.the_connection.mav.command_long_send(*args)
 
         takeoff_msg = self.the_connection.recv_match(type='COMMAND_ACK', blocking=True, timeout=3)
-        #print(f"Takeoff ACK:  {takeoff_msg}")
+        print(f"Takeoff ACK:  {takeoff_msg}")
 
 
 if __name__ == "__main__":

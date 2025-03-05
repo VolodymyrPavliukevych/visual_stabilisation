@@ -36,7 +36,6 @@ class OpticalFlowInteractor():
     
     # Processing optical flow based correction signal
     def compute_correction_optical_flow(self, message):
-        return (message._timestamp, 100, 100)
         _timestamp = message._timestamp
 
         # Extract optical flow data
@@ -57,8 +56,8 @@ class OpticalFlowInteractor():
             velocity_y = flow_y * ground_distance
 
             # Stabilize the drone using PID
-            correction_x = self.pid_x.compute(-velocity_x, dt) * -1000
-            correction_y = self.pid_y.compute(-velocity_y, dt) * -1000
+            correction_x = self.pid_x.compute(-velocity_x, dt)
+            correction_y = self.pid_y.compute(-velocity_y, dt)
 
             print(f"dt: {dt:0.2f} ground_distance: {ground_distance:0.2f}, correction_x: {correction_x:0.2f}, correction_y: {correction_y:0.2f}")
             return (correction_x, correction_y)
