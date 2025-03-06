@@ -42,7 +42,8 @@ class OpticalFlowInteractor():
         flow_x = message.flow_comp_m_x
         flow_y = message.flow_comp_m_x
         flow_quality = message.quality  # 0-255 quality of the flow
-
+        print(f"flow_x: {flow_x}, flow_y: {flow_y}, flow_quality: {flow_quality}")
+        
         if flow_quality < 50:  # Ignore low-quality measurements
             return
 

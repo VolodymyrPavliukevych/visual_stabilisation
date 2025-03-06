@@ -1,0 +1,33 @@
+# Iris is X frame
+FRAME_CLASS	1
+FRAME_TYPE	1
+# IRLOCK FEATURE
+RC8_OPTION 39
+PLND_ENABLED    1
+PLND_TYPE       3
+# SONAR FOR IRLOCK
+SIM_SONAR_SCALE 10
+RNGFND1_TYPE 1
+RNGFND1_SCALING 10
+RNGFND1_PIN 0
+RNGFND1_MAX 50.00
+
+# Custom params
+GPS_TYPE 0              # Disable GPS
+ARMING_CHECK 0          # Disable arming checks
+EK3_SRC1_POSXY 6        # Use Optical Flow instead of GPS
+EK3_SRC1_VELXY 6        # Use Optical Flow velocity
+EK3_SRC1_POSZ 1         # Use Barometer for altitude
+EK3_SRC1_VELZ 3         # Use Accelerometer for vertical velocity
+AHRS_EKF_TYPE 3         # Use EKF3 instead of EKF2
+EK3_ENABLE 1            # Enable EKF3
+FLOW_TYPE 1
+
+FLOW_FXSCALER 1.0
+FLOW_FYSCALER 1.0
+FLOW_ORIENT_YAW 0
+
+
+
+
+

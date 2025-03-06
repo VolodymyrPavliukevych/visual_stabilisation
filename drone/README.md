@@ -25,6 +25,13 @@ python3.12 sim_vehicle.py -v ArduCopter -I0 -M "--out=127.0.0.1:14551"
 cd /Users/roaming/Projects/BFO/ardupilot/Tools/autotest && \
 python3.12 sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --map --console -I0 -M "--out=127.0.0.1:14551"
 
+export GZ_SIM_SYSTEM_PLUGIN_PATH=/usr/local/lib/ardupilot_gazebo
+export GZ_SIM_RESOURCE_PATH=/usr/local/share/ardupilot_gazebo/worlds:/usr/local/share/ardupilot_gazebo/models
+export GZ_VERSION harmonic
+
+LD_TRACE_LOADED_OBJECTS=1
+
+
 # Run simulator
 gz sim -v4 -r -s iris_runway.sdf
 gz sim -v4 -r -g iris_runway.sdf
