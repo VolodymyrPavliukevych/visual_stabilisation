@@ -42,7 +42,7 @@ class OpticalFlowInteractor():
         flow_x = message.flow_comp_m_x
         flow_y = message.flow_comp_m_x
         flow_quality = message.quality  # 0-255 quality of the flow
-        print(f"flow_x: {flow_x}, flow_y: {flow_y}, flow_quality: {flow_quality}")
+        # print(f"flow_x: {flow_x}, flow_y: {flow_y}, flow_quality: {flow_quality}")
         
         if flow_quality < 50:  # Ignore low-quality measurements
             return
@@ -60,6 +60,6 @@ class OpticalFlowInteractor():
             correction_x = self.pid_x.compute(-velocity_x, dt)
             correction_y = self.pid_y.compute(-velocity_y, dt)
 
-            print(f"dt: {dt:0.2f} ground_distance: {ground_distance:0.2f}, correction_x: {correction_x:0.2f}, correction_y: {correction_y:0.2f}")
-            return (correction_x, correction_y)
+            #print(f"dt: {dt:0.2f}s ground_distance: {ground_distance:0.2f}m, correction_x: {correction_x:0.4f}m, correction_y: {correction_y:0.4f}m")
+            return (dt, correction_x, correction_y)
         return None

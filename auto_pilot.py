@@ -34,14 +34,20 @@ class AutoPilot():
     def __init__(self, connection_string: str):
         # Start a connection listening to a UDP port
         self.the_connection = mavutil.mavlink_connection(connection_string)
+        self.fly_controller = FlyController(self.the_connection, delegate=self)
+
         self.__is_listening = False
-        self.fly_controller = FlyController(self.the_connection)
         self.__latest_received_message = None
+        self.message_subscriber_thread = None
+
         self.message_dispatcher = MessageDispatcher(controller=self.fly_controller)
         self.connection_listener_thread = threading.Thread(target=self.connection_listener, name="CLT", daemon=True)
         self.connection_listener_thread.start()
-        self.message_subscriber_thread = None
-        self.altitute = None
+    
+        self.__flight_palan_is_acomplished = False
+
+    def flight_palan_is_acomplished(self):
+        self.__flight_palan_is_acomplished = True
 
     @property
     def is_listening(self):
@@ -58,12 +64,13 @@ class AutoPilot():
         
         self.fly_controller.fly()
         
-        while True:
+        while self.__flight_palan_is_acomplished == False:
+            self.the_connection.close()
             sleep(1)        
 
     @property
     def is_ready(self) -> bool:
-         return self.is_listening and self.altitute is not None
+         return self.is_listening
                 
     def connection_established(self):
         self.the_connection.set_mode(COPTER_MODE_GUIDED_NOGPS)
@@ -103,7 +110,7 @@ class AutoPilot():
                     self.connection_lost()
                 
                 #if DEBUG:    
-                print(f"Heartbeat dlt: {dlt:0.2f}sec.")
+                #print(f"Heartbeat dlt: {dlt:0.2f}sec.")
                 
                 timestamp = self.__latest_received_message._timestamp
                 

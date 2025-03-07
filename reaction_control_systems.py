@@ -10,7 +10,7 @@ from time import time
 from pymavlink import mavutil
 from pymavlink.mavutil import mavudp, mavtcp
 from pymavlink.dialects.v20.ardupilotmega import MAVLink_set_position_target_local_ned_message
-from pymavlink.dialects.v20.ardupilotmega import set_position_target_local_ned_send
+# from pymavlink.dialects.v20.ardupilotmega import set_position_target_local_ned_send
 from pymavlink.dialects.v20.ardupilotmega import MAVLink
 
 from pymavlink.dialects.v20.ardupilotmega import COPTER_MODE_GUIDED_NOGPS, MAV_TYPE_QUADROTOR
@@ -29,20 +29,39 @@ class ReactionControlSystems():
     def __init__(self, the_connection: mavudp | mavtcp):
         self.the_connection = the_connection
 
+    def send_motors_off(self):
+        self.send_attitude_target(thrust=0)
+        self.the_connection.arducopter_disarm()
+        self.the_connection.motors_disarmed_wait()
+
+    def send_motors_on(self, force_thrust: bool = False):
+        self.the_connection.arducopter_arm()
+        if self.the_connection.motors_armed() == False:
+            print("Motors are not ready")
+            
+            while self.the_connection.motors_armed() == False:
+                self.the_connection.arducopter_arm()
+                print("arming...")
+                sleep(1.0)
+#        if force_thrust:
+#            self.send_attitude_target(thrust=0.6)
+
 
     # Function to send attitude target
     def send_attitude_target(self, roll=0, pitch=0, yaw=0, thrust=0.5):
         # Arm the drone
-        self.the_connection.arducopter_arm()
-        if self.the_connection.motors_armed() == False:
-            self.the_connection.motors_armed_wait()
+        self.send_motors_on()
 
         while True:
             sysid = self.the_connection.sysid
             if self.the_connection.sysid_state[sysid].armed:
                 break
+            else:
+                print("Drone not armed.")
+                sleep(0.1)
 
-        print("Drone armed.")
+
+        #print("Drone armed.")
         """
         Sends a MAVLink SET_ATTITUDE_TARGET message.
         roll, pitch, yaw are in radians.
@@ -50,8 +69,8 @@ class ReactionControlSystems():
         """
         q = [
             math.cos(yaw / 2),  # w
-            0,                  # x (roll)
-            0,                  # y (pitch)
+            roll,               # x (roll)
+            pitch,              # y (pitch)
             math.sin(yaw / 2)   # z (yaw)
         ]
         

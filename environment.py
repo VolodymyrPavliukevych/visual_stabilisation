@@ -46,3 +46,24 @@ class FlyControlException(Exception):
 
         if isinstance(code, FlyControlExceptionCode) == False:
             self.message = 'Intent error heppend code: ' + str(code)    
+
+
+class FlightPlanExceptionCode(IntEnum):
+    TARGET_ALTITUDE_IN_NONE = 0
+    CURRENT_ALTITUDE_IN_NONE = 1
+
+class FlightPlanException(Exception):
+    def __init__(self, code, message=None, traceback=None):
+        self.code = code
+        self.traceback = traceback		
+        if message is not None:
+            self.message = message
+
+        if isinstance(code, FlightPlanExceptionCode):
+            if message is None and code.value == FlightPlanExceptionCode.TARGET_ALTITUDE_IN_NONE.value:
+                self.message = "Target altitude is not set"
+            elif message is None and code.value == FlightPlanExceptionCode.CURRENT_ALTITUDE_IN_NONE.value:
+                self.message = "Current altitude is not set"
+
+        if isinstance(code, FlyControlExceptionCode) == False:
+            self.message = 'Intent error heppend code: ' + str(code)
