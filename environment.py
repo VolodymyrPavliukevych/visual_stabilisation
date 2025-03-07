@@ -11,6 +11,7 @@ class FlyTask(IntEnum):
     IDLE = 0
     TEST_FLY_CONTROLS = 1
     DONE = 2
+    ABORT = 3
     
 class FlyState(StrEnum):
     UNKNOWN = "UNKNOWN"
