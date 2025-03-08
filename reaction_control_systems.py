@@ -22,8 +22,24 @@ from utilities.get_autopilot_info import get_autopilot_info
 from time import sleep
 import math
 
-
 from environment import FlyState, FlyTask, FlyControlException, FlyControlExceptionCode
+
+# Convert pitch angle to quaternion
+def to_quaternion(roll=0.0, pitch=0.0, yaw=0.0):
+    cy = math.cos(yaw * 0.5)
+    sy = math.sin(yaw * 0.5)
+    cp = math.cos(pitch * 0.5)
+    sp = math.sin(pitch * 0.5)
+    cr = math.cos(roll * 0.5)
+    sr = math.sin(roll * 0.5)
+
+    q = [
+        cr * cp * cy + sr * sp * sy,  # w
+        sr * cp * cy - cr * sp * sy,  # x
+        cr * sp * cy + sr * cp * sy,  # y
+        cr * cp * sy - sr * sp * cy   # z
+    ]
+    return q
 
 class ReactionControlSystems():
     def __init__(self, the_connection: mavudp | mavtcp):
@@ -47,6 +63,7 @@ class ReactionControlSystems():
 #            self.send_attitude_target(thrust=0.6)
 
 
+
     # Function to send attitude target
     def send_attitude_target(self, roll=0, pitch=0, yaw=0, thrust=0.5):
         # Arm the drone
@@ -60,24 +77,16 @@ class ReactionControlSystems():
                 print("Drone not armed.")
                 sleep(0.1)
 
-
-        #print("Drone armed.")
         """
         Sends a MAVLink SET_ATTITUDE_TARGET message.
         roll, pitch, yaw are in radians.
         thrust is from 0.0 (no thrust) to 1.0 (full thrust).
         """
-        q = [
-            math.cos(yaw / 2),  # w
-            roll,               # x (roll)
-            pitch,              # y (pitch)
-            math.sin(yaw / 2)   # z (yaw)
-        ]
-        
+        q = to_quaternion(roll, pitch, yaw)
         self.the_connection.mav.set_attitude_target_send(
             int(time()),  # Timestamp in microseconds
-            1,  # Target system (drone ID)
-            1,  # Target component
+            self.the_connection.target_system,      # Target system (drone ID)
+            self.the_connection.target_component,   # Target component
             0b00000000,  # Type mask: No masking (control roll, pitch, yaw, and thrust)
             q,  # Quaternion (attitude)
             0,  # Body roll rate

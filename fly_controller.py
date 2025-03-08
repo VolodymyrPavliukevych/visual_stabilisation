@@ -23,8 +23,10 @@ import math
 class FlightPlan():
     def __init__(self, ground_altitude: float = 0.9):
         self.__altitude_approximation = FlyController.ALTITUDE_APPROXIMATION
+        
         self.ground_altitude = ground_altitude
         self.target_altitude = 0.0
+
         self.target_latitude = None
         self.target_longitude = None        
 
@@ -163,7 +165,7 @@ class FlyController():
             
             elif self.__fly_state == FlyState.IN_THE_AIR:
                 start_time = time()
-                while time() - start_time < 5:
+                while time() - start_time < 10.0:
                     self.altitude_hold(altitude=5.0)
                     print(f"In the air {time() - start_time:0.2f}s")
                     sleep(1)
@@ -257,8 +259,12 @@ class FlyController():
         return self.corrent_altitude == 0.0
 
     def compute_thrust_adjustment(self, target_thrust: float, dlt_altitude: float, movement_thrust: float = 0.0):
-        #TODO: compute thrust adjustment in respact to the dlt_altitude
-        return target_thrust - self.__target_thrust + movement_thrust
+        adjustment = (target_thrust - self.__target_thrust + movement_thrust)
+        # ToDo: Implement the adjustment in respect to the dlt_altitude
+        # k = pow(dlt_altitude, 2) * 0.01
+        # adjustment_in_respect_dlt_altitude = adjustment * k
+        # print(f"compute thrust adjustment: {adjustment:0.2f} adjustment_in_respect_dlt_altitude: {adjustment_in_respect_dlt_altitude:0.2f} dlt_altitude: {dlt_altitude:0.2f}")
+        return adjustment
 
     # Main loop transform target altitude, latitude, longtitudes in to the drone reaction: throst, pitch, roll, yaw
     def main_reaction_control_loop(self):
@@ -274,12 +280,18 @@ class FlyController():
 
             # 1) Compute thrust adjustment based on target and current altitude
             if (self.target_altitude != 0.0 or self.corrent_altitude != 0.0) and (self.target_altitude is not None and self.corrent_altitude is not None):
-                print(f"dlt_altitude: {self.__flight_plan.dlt_altitude:0.2f}")
-                if self.__flight_plan.dlt_altitude > FlyController.ALTITUDE_APPROXIMATION:
-                    thrust_adjustment_for_maintain_altitude += self.compute_thrust_adjustment(target_thrust=FlyController.CLAIMBING_THRUST, movement_thrust=0.0)
+                dlt_altitude = self.__flight_plan.dlt_altitude
+                if dlt_altitude > FlyController.ALTITUDE_APPROXIMATION:
+                    thrust_adjustment = self.compute_thrust_adjustment(target_thrust=FlyController.CLAIMBING_THRUST, 
+                                                                       dlt_altitude=dlt_altitude, 
+                                                                       movement_thrust=0.0)
+                    thrust_adjustment_for_maintain_altitude += thrust_adjustment
 
-                elif self.__flight_plan.dlt_altitude < -FlyController.ALTITUDE_APPROXIMATION:
-                    thrust_adjustment_for_maintain_altitude += self.compute_thrust_adjustment(target_thrust=FlyController.LAND_THRUST, movement_thrust=0.0)
+                elif dlt_altitude < -FlyController.ALTITUDE_APPROXIMATION:
+                    thrust_adjustment = self.compute_thrust_adjustment(target_thrust=FlyController.LAND_THRUST, 
+                                                                       dlt_altitude=dlt_altitude, 
+                                                                       movement_thrust=0.0)
+                    thrust_adjustment_for_maintain_altitude += thrust_adjustment
                     
                 else:
                     thrust_adjustment_for_maintain_altitude = 0.0 #FlyController.ALTITUDE_HOLD_THRUST
@@ -313,9 +325,11 @@ class FlyController():
                         print("ERROR: You can't disarm motors while in the air")
 
                 if command.kind == FlyCommandKind.VELOCITY_CORRECTION and self.fly_state_is_suitable_for_correction:
-                    vx, vy, vz, yaw_rate = command.value
-                    pitch_adjustment = math.radians(-45)
-                    self.__target_pitch = pitch_adjustment
+                    vx, vy, vz, yaw_rate, dt = command.value
+                    pitch_adjustment = math.radians(-100 * vx) 
+                    roll_adjustment = math.radians(-100 * vy)
+                
+                    print(f"vx: {vx:0.2f} vy: {vy:0.2f} vz: {vz:0.2f} yaw_rate: {yaw_rate:0.2f} dt: {dt:0.2f}")
                     # thrust_adjustment += 0.5
                     #max(self.target_thrust * 1.25, FlyController.MAX_VELOCITY_CORRECTION_THRUST)
 
@@ -327,8 +341,11 @@ class FlyController():
 
             
             # 3) Send the command to the drone
-            self.send_attitude_target(pitch=0, thrust=self.__target_thrust)
             
+            self.send_attitude_target(pitch=pitch_adjustment, 
+                                      roll=roll_adjustment, 
+                                      thrust=self.__target_thrust)
+
             # Throtle the message sending
             sleep(FlyController.MAIN_LOOP_STEP_SEC)
 
@@ -364,4 +381,4 @@ class FlyController():
         vy = velocity_y
         vz = velocity_z
         yaw_rate = 0
-        self.add_command(FlyCommand(kind=FlyCommandKind.VELOCITY_CORRECTION, value=(vx, vy, vz, yaw_rate)))
+        self.add_command(FlyCommand(kind=FlyCommandKind.VELOCITY_CORRECTION, value=(vx, vy, vz, yaw_rate, dt)))
