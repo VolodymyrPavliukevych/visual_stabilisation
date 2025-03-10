@@ -77,8 +77,8 @@ class FlyController():
     TASK_LATITUDE = 0.0
     TASK_LONGTITUDE = 10.0
 
-    CLAIMBING_THRUST = 0.55
-    TAKE_OFF_THRUST = 0.7
+    CLAIMBING_THRUST = 0.7
+    TAKE_OFF_THRUST = 0.8
     LAND_THRUST = 0.3
     ALTITUDE_HOLD_THRUST = 0.5
     ALTITUDE_APPROXIMATION = 0.1
@@ -123,15 +123,16 @@ class FlyController():
     
     def change_fly_task(self, to_task:FlyTask):
         assert isinstance(to_task, FlyTask) == True, "Wrong task type"
-        match self.__fly_task:
-            case FlyTask.IDLE:
-                  self.__fly_task = to_task
-            case FlyTask.DONE:
-                  self.__fly_task = to_task
-            case FlyTask.TEST_FLY_CONTROLS:
-                  self.__fly_task = to_task
-            case _:
-                raise FlyControlException(code=FlyControlExceptionCode.NOT_SUITABLE_TASK)
+        self.__fly_task = to_task
+        # match self.__fly_task:
+        #     case FlyTask.IDLE:
+        #           self.__fly_task = to_task
+        #     case FlyTask.DONE:
+        #           self.__fly_task = to_task
+        #     case FlyTask.TEST_FLY_CONTROLS:
+        #           self.__fly_task = to_task
+        #     case _:
+        #         raise FlyControlException(code=FlyControlExceptionCode.NOT_SUITABLE_TASK)
 
     def change_fly_state(self, to_state:  FlyState):
         assert isinstance(to_state, FlyState) == True, "Wrong state type"
@@ -155,6 +156,8 @@ class FlyController():
     def follow_flight_plan_loop(self):
         print(f"Follow test fly control: {self.__fly_state}")
         try:
+            if self.__fly_state == FlyState.DONE:
+                print("Task DONE")
             # ------------ UNCONTROLLED_IN_THE_AIR ------------
             if self.__fly_state == FlyState.UNCONTROLLED_IN_THE_AIR:
                  self.change_fly_state(to_state=FlyState.LANDING)
@@ -165,6 +168,7 @@ class FlyController():
                     self.change_fly_state(to_state=FlyState.TAKING_OFF)
 
                 elif self.__fly_task == FlyTask.DONE:
+                    self.change_fly_state(to_state=FlyState.DONE)
                     self.add_command(FlyCommand(kind=FlyCommandKind.MOTORS_OFF))
                     sleep(1)
                     return
@@ -200,8 +204,6 @@ class FlyController():
                     sleep(1)
 
                 print("The Task is acoplished")
-
-                self.change_fly_task(to_task=FlyTask.DONE)
                 self.change_fly_state(to_state=FlyState.LANDING)
             
             # ------------ MOVE ------------
@@ -223,8 +225,8 @@ class FlyController():
                 while self.__flight_plan.is_target_altitude_been_achieved == False:
                      print(f"Waiting for land: {self.__flight_plan.current_altitude:0.2f} -> {self.__flight_plan.target_altitude:0.2f}")
                      self.land()
-                     sleep(1)
-
+                     sleep(0.5)
+                self.change_fly_task(to_task=FlyTask.DONE)
                 self.change_fly_state(to_state=FlyState.ON_THE_GROUND)
                         
             sleep(FlyController.FLIGHT_PLAN_LOOP_DALEY_SEC)
@@ -385,17 +387,24 @@ class FlyController():
             
             dx, dy = self.__flight_plan.dlt_local_coordinates
             # Moving
-            if self.__fly_state == FlyState.MOVE and (abs(dx) > 2.0 or abs(dy) > 2.0):
+            if self.__fly_state == FlyState.MOVE and (abs(dx) > 1.0 or abs(dy) > 1.0):
                 
-                pitch_adjustment = math.copysign(FlyController.MOVING_BASE_ANGLE, -dy) * (math.sqrt(abs(dy)) * 0.3)
-                roll_adjustment = math.copysign(FlyController.MOVING_BASE_ANGLE, -dx) * math.sqrt(abs(dx) * 0.3)
+                pitch_adjustment = math.copysign(FlyController.MOVING_BASE_ANGLE, -dy) * (math.sqrt(abs(dy)) * 0.1)
+                roll_adjustment = math.copysign(FlyController.MOVING_BASE_ANGLE, -dx) * math.sqrt(abs(dx) * 0.5)
+                self.__target_thrust += 0.2
                 print(f"(+) pitch: {pitch_adjustment:0.2f} current_latitude: {self.__flight_plan.current_latitude:0.2f}, current_longitude: {self.__flight_plan.current_longitude:0.2f}, dx: {dx:0.2} dy: {dy:0.2} compensator: {math.sqrt(abs(dy)):0.2}")
-
-            # Stop
-            elif self.__fly_state == FlyState.MOVE and (abs(dx) > 1 or abs(dy) > 1):
-                pitch_adjustment = inertial_pitch_adjustment
-                roll_adjustment = inertial_roll_adjustment
-                print(f"(-) pitch: {pitch_adjustment:0.2f} current_latitude: {self.__flight_plan.current_latitude:0.2f}, current_longitude: {self.__flight_plan.current_longitude:0.2f}, dx: {dx:0.2} dy: {dy:0.2} compensator: {math.sqrt(abs(dy)):0.2}")
+            elif self.__fly_state == FlyState.MOVE:
+                pitch_adjustment = 0 
+                roll_adjustment = 0
+                print(f"(|) pitch: {pitch_adjustment:0.2f} current_latitude: {self.__flight_plan.current_latitude:0.2f}, current_longitude: {self.__flight_plan.current_longitude:0.2f}, dx: {dx:0.2} dy: {dy:0.2} compensator: {math.sqrt(abs(dy)):0.2}")                
+            # # Stop
+            # elif self.__fly_state == FlyState.MOVE and (abs(dx) < 1 and abs(dy) < 1):
+            #     pitch_adjustment = 0# math.copysign(FlyController.MOVING_BASE_ANGLE, -dy) * (math.sqrt(abs(dy)) * 0.01)
+            #     roll_adjustment = math.copysign(FlyController.MOVING_BASE_ANGLE, -dx) * math.sqrt(abs(dx) * 0.5)
+                
+            #     self.__target_thrust += 0.2
+            #     print(f"inertial_pitch_adjustment: {inertial_pitch_adjustment:0.2f} inertial_roll_adjustment: {inertial_roll_adjustment:0.2f}")
+            #     print(f"(-) pitch: {pitch_adjustment:0.2f} current_latitude: {self.__flight_plan.current_latitude:0.2f}, current_longitude: {self.__flight_plan.current_longitude:0.2f}, dx: {dx:0.2} dy: {dy:0.2} compensator: {math.sqrt(abs(dy)):0.2}")
 
             if self.armed == False:
                 continue

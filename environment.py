@@ -34,6 +34,7 @@ class FlyState(StrEnum):
     ALTITUDE_HOLD = "ALTITUDE_HOLD"
     LANDING = "LANDING"
     MOVE = "MOVE"
+    DONE = "DONE"
     
 
 class FlyControlExceptionCode(IntEnum):
