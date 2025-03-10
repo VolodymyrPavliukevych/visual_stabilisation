@@ -7,6 +7,17 @@
 """
 from enum import IntEnum, StrEnum
 
+class FlyCommandKind(IntEnum):
+    TAKE_OFF = 0
+    CLIMBING = 1
+    ALTITUDE_HOLD = 2
+    LANDING = 3
+    MOTORS_OFF = 4
+    MOVE = 5
+    
+    # TODO: FIX IT
+    ALTITUDE_HOLD_CORRECTION = 6
+
 class FlyTask(IntEnum):
     IDLE = 0
     TEST_FLY_CONTROLS = 1
@@ -15,12 +26,13 @@ class FlyTask(IntEnum):
     
 class FlyState(StrEnum):
     UNKNOWN = "UNKNOWN"
-    ON_THE_GROUND = "ON_THE_GROUND"
     UNCONTROLLED_IN_THE_AIR = "UNCONTROLLED_IN_THE_AIR"
+    ON_THE_GROUND = "ON_THE_GROUND"
     TAKING_OFF = "TAKING_OFF"
     ALTITUDE_CLIMBING = "ALTITUDE_CLIMBING"
-    LAND = "LAND"
     IN_THE_AIR = "IN_THE_AIR"
+    ALTITUDE_HOLD = "ALTITUDE_HOLD"
+    LANDING = "LANDING"
     MOVE = "MOVE"
     
 
@@ -67,3 +79,25 @@ class FlightPlanException(Exception):
 
         if isinstance(code, FlyControlExceptionCode) == False:
             self.message = 'Intent error heppend code: ' + str(code)
+
+
+
+class RCSExceptionCode(IntEnum):
+    CAN_NOT_ARM_UAV = 0
+    CAN_NOT_DISARM_UAV = 1
+
+class RCSException(Exception):
+    def __init__(self, code, message=None, traceback=None):
+        self.code = code
+        self.traceback = traceback		
+        if message is not None:
+            self.message = message
+
+        if isinstance(code, FlightPlanExceptionCode):
+            if message is None and code.value == RCSExceptionCode.CAN_NOT_ARM_UAV.value:
+                self.message = "Can not arm UAV"
+            elif message is None and code.value == RCSExceptionCode.CAN_NOT_DISARM_UAV.value:
+                self.message = "Can not disarm UAV"
+
+        if isinstance(code, FlyControlExceptionCode) == False:
+            self.message = 'Intent error heppend code: ' + str(code)            

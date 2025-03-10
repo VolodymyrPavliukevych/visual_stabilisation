@@ -23,8 +23,8 @@ SIM_FLOW_ENABLE 1
 
 ### Add one more port to mavlink
 ```
-cd ~/Projects/BFO/ardupilot/Tools/autotest && \
-python3.12 sim_vehicle.py -v ArduCopter -I0 -M "--out=127.0.0.1:14551"
+#cd ~/Projects/BFO/ardupilot/Tools/autotest && \
+#python3.12 sim_vehicle.py -v ArduCopter -I0 -M "--out=127.0.0.1:14551"
 
 cd ~/Projects/BFO/ardupilot/Tools/autotest && \
 python3.12 sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --map --console -I0 -M "--out=127.0.0.1:14551"

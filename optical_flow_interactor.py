@@ -28,11 +28,16 @@ class ProportionalIntegralDerivative():
 
 
 class OpticalFlowInteractor():
+
     def __init__(self):
         # Initialize PID controllers for x and y stabilization
         self.pid_x = ProportionalIntegralDerivative(kp=0.1, ki=0.01, kd=0.05)
         self.pid_y = ProportionalIntegralDerivative(kp=0.1, ki=0.01, kd=0.05)
         self.latest_timestamp = 0
+
+        self.local_x = 0
+        self.local_y = 0
+
     
     # Processing optical flow based correction signal
     def compute_correction_optical_flow(self, message):
@@ -40,9 +45,15 @@ class OpticalFlowInteractor():
 
         # Extract optical flow data
         flow_x = message.flow_comp_m_x
-        flow_y = message.flow_comp_m_x
+        flow_y = message.flow_comp_m_y
+
+        self.local_x += message.flow_comp_m_x
+        self.local_y += message.flow_comp_m_y
+
+        ground_distance = message.ground_distance
         flow_quality = message.quality  # 0-255 quality of the flow
-        # print(f"flow_x: {flow_x}, flow_y: {flow_y}, flow_quality: {flow_quality}")
+
+        #print(f"flow_comp_m_x: {flow_x:0.2f}, flow_comp_m_y: {flow_y:0.2f}, {message.flow_x}, {message.flow_y} local_x: {self.local_x:0.2f}, local_y: {self.local_y:0.2f}, ground_distance: {ground_distance:0.2f} flow_quality: {flow_quality:0.2f}")
         
         if flow_quality < 50:  # Ignore low-quality measurements
             return
@@ -51,7 +62,6 @@ class OpticalFlowInteractor():
         self.latest_timestamp = _timestamp
 
         # Calculate velocity based on optical flow and distance (ground_distance in meters)
-        ground_distance = message.ground_distance
         if ground_distance > 0 and dt < 5.0:
             velocity_x = flow_x * ground_distance
             velocity_y = flow_y * ground_distance
@@ -61,5 +71,5 @@ class OpticalFlowInteractor():
             correction_y = self.pid_y.compute(-velocity_y, dt)
 
             #print(f"dt: {dt:0.2f}s ground_distance: {ground_distance:0.2f}m, correction_x: {correction_x:0.4f}m, correction_y: {correction_y:0.4f}m")
-            return (dt, correction_x, correction_y)
+            return (dt, correction_x, correction_y, self.local_x, self.local_y)
         return None

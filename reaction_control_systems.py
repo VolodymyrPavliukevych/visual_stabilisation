@@ -22,7 +22,7 @@ from utilities.get_autopilot_info import get_autopilot_info
 from time import sleep
 import math
 
-from environment import FlyState, FlyTask, FlyControlException, FlyControlExceptionCode
+from environment import RCSException, RCSExceptionCode
 
 # Convert pitch angle to quaternion
 def to_quaternion(roll=0.0, pitch=0.0, yaw=0.0):
@@ -50,25 +50,28 @@ class ReactionControlSystems():
         self.the_connection.arducopter_disarm()
         self.the_connection.motors_disarmed_wait()
 
-    def send_motors_on(self, force_thrust: bool = False):
+    def send_motors_on(self):
         self.the_connection.arducopter_arm()
+
         if self.the_connection.motors_armed() == False:
             print("Motors are not ready")
             
+            left_attemppt = 10
             while self.the_connection.motors_armed() == False:
                 self.the_connection.arducopter_arm()
                 print("arming...")
+                if left_attemppt == 0:
+                    raise RCSException(code=RCSExceptionCode.CAN_NOT_ARM_UAV)
                 sleep(1.0)
-#        if force_thrust:
-#            self.send_attitude_target(thrust=0.6)
+                left_attemppt -= 1
+
+        self.send_attitude_target(thrust=0.3)
 
 
 
     # Function to send attitude target
     def send_attitude_target(self, roll=0, pitch=0, yaw=0, thrust=0.5):
-        # Arm the drone
-        self.send_motors_on()
-
+        
         while True:
             sysid = self.the_connection.sysid
             if self.the_connection.sysid_state[sysid].armed:
