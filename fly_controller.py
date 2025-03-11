@@ -216,7 +216,7 @@ class FlyController():
                     sleep(0.1)
                 
                 print("Target point achived.")
-                self.change_fly_state(to_state=FlyState.LANDING)
+                self.change_fly_state(to_state=FlyState.ALTITUDE_HOLD)
                 
             
             # ------------ LANDING ------------
@@ -274,7 +274,7 @@ class FlyController():
 
     @property
     def fly_state_is_suitable_for_correction(self):
-        return self.__fly_state != FlyState.UNKNOWN and self.__fly_state != FlyState.ON_THE_GROUND and self.__fly_state != FlyState.TAKING_OFF
+        return self.__fly_state != FlyState.UNKNOWN and self.__fly_state != FlyState.ON_THE_GROUND and self.__fly_state != FlyState.TAKING_OFF and self.__fly_state != FlyState.MOVE
     
     @property
     def target_altitude(self):
