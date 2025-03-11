@@ -3,7 +3,7 @@
 
 This project implements an **optical flow-based stabilization system** for Ardupilot-compatible drones. The system enhances flight stability by using optical flow data to adjust drone position and orientation in real-time. The architecture follows a modular class-based design, enabling easy maintenance, expansion, and testing.
 
-<img src="https://github.com/VolodymyrPavliukevych/visual_stabilisation/blob/3cdd33e2a808fb80f783647e74bd9ab249af8fd3/dron_stabilisation.gif?raw=true" alt="Drone fly simulation, screen cast." width=500 href="none"></img>
+<img src="https://github.com/VolodymyrPavliukevych/visual_stabilisation/blob/3cdd33e2a808fb80f783647e74bd9ab249af8fd3/dron_stabilisation.gif?raw=true" alt="Drone fly simulation, screen cast." width=850 href="none"></img>
 
 ---
 
